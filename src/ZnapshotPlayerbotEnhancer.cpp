@@ -59,6 +59,7 @@ constexpr std::array<uint32, ROLE_COUNT> RAID_OF_TWENTY_FIVE_ROLES = {3, 5, 17};
 constexpr std::array<uint32, ROLE_COUNT> RAID_OF_FORTY_ROLES = {4, 8, 28};
 std::mutex trackedBotsMutex;
 std::unordered_map<ObjectGuid, ObjectGuid> trackedBots;
+std::unordered_set<ObjectGuid> pendingBotLogins;
 std::unordered_set<ObjectGuid> pendingDismissals;
 std::atomic<bool> autoDismissOnDisband = false;
 
@@ -66,6 +67,7 @@ void TrackBot(ObjectGuid ownerGuid, ObjectGuid botGuid)
 {
     std::lock_guard<std::mutex> lock(trackedBotsMutex);
     trackedBots[botGuid] = ownerGuid;
+    pendingBotLogins.insert(botGuid);
 }
 
 uint32 GetTrackedBotCount(ObjectGuid ownerGuid)
@@ -77,6 +79,32 @@ uint32 GetTrackedBotCount(ObjectGuid ownerGuid)
             ++count;
 
     return count;
+}
+
+uint32 GetPendingTrackedBotCount(ObjectGuid ownerGuid)
+{
+    std::lock_guard<std::mutex> lock(trackedBotsMutex);
+    uint32 count = 0;
+    for (ObjectGuid const& botGuid : pendingBotLogins)
+    {
+        auto itr = trackedBots.find(botGuid);
+        if (itr != trackedBots.end() && itr->second == ownerGuid)
+            ++count;
+    }
+
+    return count;
+}
+
+bool IsTrackedBot(ObjectGuid botGuid)
+{
+    std::lock_guard<std::mutex> lock(trackedBotsMutex);
+    return trackedBots.contains(botGuid);
+}
+
+bool IsPendingBotLogin(ObjectGuid botGuid)
+{
+    std::lock_guard<std::mutex> lock(trackedBotsMutex);
+    return pendingBotLogins.contains(botGuid);
 }
 
 uint32 RequestOwnerDismissal(ObjectGuid ownerGuid)
@@ -110,6 +138,28 @@ void QueueGroupDismissals(Group* group)
 
 void ProcessPendingDismissals()
 {
+    std::vector<std::pair<ObjectGuid, ObjectGuid>> pendingLogins;
+    {
+        std::lock_guard<std::mutex> lock(trackedBotsMutex);
+        for (ObjectGuid const& botGuid : pendingBotLogins)
+        {
+            auto botItr = trackedBots.find(botGuid);
+            if (botItr != trackedBots.end())
+                pendingLogins.emplace_back(botGuid, botItr->second);
+        }
+    }
+
+    for (auto const& [botGuid, ownerGuid] : pendingLogins)
+    {
+        Player* owner = ObjectAccessor::FindConnectedPlayer(ownerGuid);
+        PlayerbotMgr* manager = owner ? GET_PLAYERBOT_MGR(owner) : nullptr;
+        if (manager && manager->GetPlayerBot(botGuid))
+        {
+            std::lock_guard<std::mutex> lock(trackedBotsMutex);
+            pendingBotLogins.erase(botGuid);
+        }
+    }
+
     std::vector<std::pair<ObjectGuid, ObjectGuid>> dismissals;
     {
         std::lock_guard<std::mutex> lock(trackedBotsMutex);
@@ -134,10 +184,11 @@ void ProcessPendingDismissals()
         if (bot)
             manager->LogoutPlayerBot(botGuid);
 
-        if (!manager || bot)
+        if (!manager || bot || !IsPendingBotLogin(botGuid))
         {
             std::lock_guard<std::mutex> lock(trackedBotsMutex);
             trackedBots.erase(botGuid);
+            pendingBotLogins.erase(botGuid);
             pendingDismissals.erase(botGuid);
         }
     }
@@ -164,7 +215,7 @@ ObjectGuid AddClassBotAtLevel(Player* master, PlayerbotMgr* manager, uint8 class
         master->GetLevel() < sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL))
         return ObjectGuid::Empty;
 
-    if (manager->GetPlayerbotsCount() + manager->GetPendingBotLogins() >=
+    if (manager->GetPlayerbotsCount() + GetPendingTrackedBotCount(master->GetGUID()) >=
         uint32(sPlayerbotAIConfig.MaxAddedBots))
         return ObjectGuid::Empty;
 
@@ -178,18 +229,14 @@ ObjectGuid AddClassBotAtLevel(Player* master, PlayerbotMgr* manager, uint8 class
     for (ObjectGuid const& guid : orderedCandidates)
     {
         if (sCharacterCache->GetCharacterLevelByGuid(guid) != targetLevel ||
-            ObjectAccessor::FindConnectedPlayer(guid))
+            ObjectAccessor::FindConnectedPlayer(guid) || IsTrackedBot(guid))
             continue;
 
         uint32 guildId = sCharacterCache->GetCharacterGuildIdByGuid(guid);
         if (guildId && PlayerbotGuildMgr::instance().IsRealGuild(guildId))
             continue;
 
-        uint32 pendingBefore = manager->GetPendingBotLogins();
         manager->AddPlayerBot(guid, master->GetSession()->GetAccountId());
-        if (manager->GetPendingBotLogins() <= pendingBefore)
-            continue;
-
         return guid;
     }
 
@@ -300,7 +347,7 @@ static bool HandleFill(ChatHandler* handler, char const* args)
     }
 
     uint32 currentSize = group ? group->GetMembersCount() : 1;
-    uint32 pendingBots = manager->GetPendingBotLogins();
+    uint32 pendingBots = GetPendingTrackedBotCount(master->GetGUID());
     currentSize += pendingBots;
     if (currentSize > targetSize)
     {
@@ -415,7 +462,7 @@ static bool HandleStatus(ChatHandler* handler, char const* /*args*/)
 
     Group* group = master->GetGroup();
     uint32 groupSize = group ? group->GetMembersCount() : 1;
-    uint32 pendingBots = manager->GetPendingBotLogins();
+    uint32 pendingBots = GetPendingTrackedBotCount(master->GetGUID());
     std::array<uint32, ROLE_COUNT> roleCounts = {0, 0, 0};
     if (group)
     {
