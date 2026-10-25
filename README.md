@@ -14,8 +14,8 @@ new bot characters; if too few existing bots are available at that level, the
 group remains partially filled.
 
 `.zpe status` shows the current group composition and ZPE's tracked bot count.
-`.zpe dismiss` logs out bots added through ZPE; bot logins still in progress are
-cancelled.
+`.zpe dismiss` logs out bots added through ZPE. If a bot is still logging in,
+ZPE logs it out after the login completes.
 
 The module installs help text for `.help zpe fill`, `.help zpe status`, and
 `.help zpe dismiss` through its world database update. Include the module's

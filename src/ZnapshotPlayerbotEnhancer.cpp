@@ -130,8 +130,12 @@ void ProcessPendingDismissals()
     {
         Player* owner = ObjectAccessor::FindConnectedPlayer(ownerGuid);
         PlayerbotMgr* manager = owner ? GET_PLAYERBOT_MGR(owner) : nullptr;
-        bool dismissalRequested = manager && manager->DismissBot(botGuid);
-        if (!manager || dismissalRequested || !ObjectAccessor::FindConnectedPlayer(botGuid))
+        Player* bot = manager ? manager->GetPlayerBot(botGuid) : nullptr;
+        if (bot)
+            manager->LogoutPlayerBot(botGuid);
+
+        bool dismissalComplete = !manager || bot || manager->GetPendingBotLogins() == 0;
+        if (dismissalComplete)
         {
             std::lock_guard<std::mutex> lock(trackedBotsMutex);
             trackedBots.erase(botGuid);
@@ -395,7 +399,7 @@ static bool HandleDismiss(ChatHandler* handler, char const* /*args*/)
     }
 
     handler->PSendSysMessage("ZPE queued dismissal for {} bot(s).", requested);
-    handler->SendSysMessage("Any still-loading ZPE bot logins will be cancelled.");
+    handler->SendSysMessage("Still-loading ZPE bots will log out after they finish logging in.");
     return true;
 }
 
