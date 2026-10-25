@@ -1,0 +1,15 @@
+# Local module configuration
+conf/conf.sh
+
+# Build output
+build/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.o
+*.obj
+*.so
+*.dll
+*.a
+*.lib

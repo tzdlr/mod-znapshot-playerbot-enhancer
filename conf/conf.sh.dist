@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+
+DB_WORLD_UPDATE_PATHS+=(
+    "$MOD_ZNAPSHOT_PLAYERBOT_ENHANCER_ROOT/sql/world/updates/"
+)

@@ -1,0 +1,2 @@
+# Automatically log out bots added by ZPE when their group is disbanded.
+ZnapshotPlayerbotEnhancer.AutoDismissOnDisband = 0
