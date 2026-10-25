@@ -134,8 +134,7 @@ void ProcessPendingDismissals()
         if (bot)
             manager->LogoutPlayerBot(botGuid);
 
-        bool dismissalComplete = !manager || bot || manager->GetPendingBotLogins() == 0;
-        if (dismissalComplete)
+        if (!manager || bot)
         {
             std::lock_guard<std::mutex> lock(trackedBotsMutex);
             trackedBots.erase(botGuid);
