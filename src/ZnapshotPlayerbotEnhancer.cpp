@@ -328,7 +328,7 @@ static bool HandleFill(ChatHandler* handler, char const* args)
         (targetSize != GROUP_OF_FIVE_SIZE && targetSize != RAID_OF_TEN_SIZE &&
          targetSize != RAID_OF_TWENTY_FIVE_SIZE && targetSize != RAID_OF_FORTY_SIZE))
     {
-        handler->SendErrorMessage("Usage: .zpe fill [5|10|25|40] [level]");
+        handler->SendErrorMessage("Usage: .zpbe fill [5|10|25|40] [level]");
         return false;
     }
 
@@ -420,7 +420,7 @@ static bool HandleFill(ChatHandler* handler, char const* args)
             --missingRoles[role];
     }
 
-    handler->PSendSysMessage("ZPE scheduled {} level-{} bot(s). Group target: {}.", added, targetLevel, targetSize);
+    handler->PSendSysMessage("ZPBE scheduled {} level-{} bot(s). Group target: {}.", added, targetLevel, targetSize);
     if (added < targetSize - currentSize)
         handler->SendSysMessage("Not enough eligible existing bots are available at that level.");
     handler->SendSysMessage("Role balance is based on class/spec data; tank and healer availability may vary.");
@@ -440,12 +440,12 @@ static bool HandleDismiss(ChatHandler* handler, char const* /*args*/)
     uint32 requested = RequestOwnerDismissal(master->GetGUID());
     if (!requested)
     {
-        handler->SendSysMessage("ZPE has no tracked bots to dismiss.");
+        handler->SendSysMessage("ZPBE has no tracked bots to dismiss.");
         return true;
     }
 
-    handler->PSendSysMessage("ZPE queued dismissal for {} bot(s).", requested);
-    handler->SendSysMessage("Still-loading ZPE bots will log out after they finish logging in.");
+    handler->PSendSysMessage("ZPBE queued dismissal for {} bot(s).", requested);
+    handler->SendSysMessage("Still-loading ZPBE bots will log out after they finish logging in.");
     return true;
 }
 
@@ -482,7 +482,7 @@ static bool HandleStatus(ChatHandler* handler, char const* /*args*/)
     handler->PSendSysMessage("Group: {}/{} (tank {}, healer {}, DPS {}).", groupSize + pendingBots,
                              RAID_OF_FORTY_SIZE, roleCounts[TANK_ROLE_INDEX], roleCounts[HEALER_ROLE_INDEX],
                              roleCounts[DPS_ROLE_INDEX]);
-    handler->PSendSysMessage("ZPE tracked bots: {}; pending bot logins: {}.",
+    handler->PSendSysMessage("ZPBE tracked bots: {}; pending bot logins: {}.",
                              GetTrackedBotCount(master->GetGUID()), pendingBots);
     handler->PSendSysMessage("Auto-dismiss on disband: {}.", autoDismissOnDisband.load() ? "on" : "off");
     return true;
@@ -550,7 +550,7 @@ public:
         };
 
         static ChatCommandTable rootCommandTable = {
-            {"zpe", commandTable},
+            {"zpbe", commandTable},
         };
 
         return rootCommandTable;
