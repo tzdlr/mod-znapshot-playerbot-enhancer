@@ -79,6 +79,8 @@ std::atomic<bool> autoDismissOnDisband = false;
 struct BotCreationContext
 {
     uint32 createdCharacters = 0;
+    bool addClassAccountsLoaded = false;
+    std::vector<uint32> addClassAccounts;
 };
 
 void TrackBot(ObjectGuid ownerGuid, ObjectGuid botGuid, uint8 targetLevel)
@@ -139,6 +141,25 @@ void ReserveAccountCharacterSlot(uint32 accountId)
 {
     std::lock_guard<std::mutex> lock(trackedBotsMutex);
     ++accountCharacterReservations[accountId];
+}
+
+void LoadAddClassAccounts(BotCreationContext& context)
+{
+    if (context.addClassAccountsLoaded)
+        return;
+
+    context.addClassAccountsLoaded = true;
+    QueryResult accounts = LoginDatabase.Query("SELECT id FROM account WHERE username LIKE '{}%%' ORDER BY id",
+                                                sPlayerbotAIConfig.RandomBotAccountPrefix.c_str());
+    if (!accounts)
+        return;
+
+    do
+    {
+        uint32 accountId = accounts->Fetch()[0].Get<uint32>();
+        if (sRandomPlayerbotMgr.IsAddClassAccount(accountId))
+            context.addClassAccounts.push_back(accountId);
+    } while (accounts->NextRow());
 }
 
 uint32 RequestOwnerDismissal(ObjectGuid ownerGuid)
@@ -320,7 +341,8 @@ ObjectGuid CreateClassBotAtLevel(Player* master, uint8 classId, uint8 targetLeve
          targetLevel < uint32(sWorld->getIntConfig(CONFIG_START_HEROIC_PLAYER_LEVEL))))
         return ObjectGuid::Empty;
 
-    std::vector<uint32> accounts = sRandomPlayerbotMgr.addClassTypeAccounts;
+    LoadAddClassAccounts(context);
+    std::vector<uint32> accounts = context.addClassAccounts;
     if (accounts.empty())
         return ObjectGuid::Empty;
 
