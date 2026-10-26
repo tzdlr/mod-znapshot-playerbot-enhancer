@@ -294,7 +294,8 @@ void CountRole(Player* member, std::array<uint32, ROLE_COUNT>& roleCounts)
         ++roleCounts[DPS_ROLE_INDEX];
 }
 
-ObjectGuid AddClassBotAtLevel(Player* master, PlayerbotMgr* manager, uint8 classId, uint8 targetLevel)
+ObjectGuid AddClassBotAtLevel(Player* master, PlayerbotMgr* manager, uint8 classId, uint8 targetLevel,
+                              bool allowLevelChange = false)
 {
     if (!master || !master->GetSession() ||
         (sPlayerbotAIConfig.AddClassCommand == 0 && !master->CanBeGameMaster()))
@@ -317,7 +318,7 @@ ObjectGuid AddClassBotAtLevel(Player* master, PlayerbotMgr* manager, uint8 class
 
     for (ObjectGuid const& guid : orderedCandidates)
     {
-        if (sCharacterCache->GetCharacterLevelByGuid(guid) != targetLevel ||
+        if ((!allowLevelChange && sCharacterCache->GetCharacterLevelByGuid(guid) != targetLevel) ||
             ObjectAccessor::FindConnectedPlayer(guid) || IsTrackedBot(guid))
             continue;
 
@@ -414,6 +415,13 @@ ObjectGuid AddFromClassList(Player* master, PlayerbotMgr* manager, std::array<ui
 
     if (createMissing)
     {
+        for (uint8 classId : classes)
+        {
+            ObjectGuid botGuid = AddClassBotAtLevel(master, manager, classId, targetLevel, true);
+            if (!botGuid.IsEmpty())
+                return botGuid;
+        }
+
         for (uint8 classId : classes)
         {
             ObjectGuid botGuid = CreateClassBotAtLevel(master, classId, targetLevel, creationContext);

@@ -15,10 +15,13 @@ the intended role.
 matching bots are available, the group remains partially filled.
 
 `.zpbe populate [5|10|25|40] [level]` first uses existing matching AddClass
-bots, then creates missing bot characters in free slots on existing AddClass
-accounts and logs them in. It does not create new accounts and creates at most
-10 characters per command. Newly generated characters may be the wrong faction;
-those characters remain in the AddClass pool for later use by that faction.
+bots, then re-levels offline AddClass bots of a suitable class if needed. If
+there are no such characters, it creates missing bot characters in free slots
+on existing AddClass accounts. It does not create new accounts and creates at
+most 10 characters per command. Re-leveling fully randomizes the bot and resets
+its quest progress, skills, spells, talents, and inventory. Newly generated
+characters may be the wrong faction; those characters remain in the AddClass
+pool for later use by that faction.
 
 `.zpbe status` shows the current group composition and ZPBE's tracked bot count.
 `.zpbe dismiss` logs out bots added through ZPBE. If a bot is still logging in,
