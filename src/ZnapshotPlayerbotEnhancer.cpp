@@ -11,6 +11,7 @@
 #include "Config.h"
 #include "DatabaseEnv.h"
 #include "Group.h"
+#include "GroupMgr.h"
 #include "GroupScript.h"
 #include "ObjectAccessor.h"
 #include "PlayerbotAI.h"
@@ -31,6 +32,7 @@
 #include <array>
 #include <algorithm>
 #include <atomic>
+#include <ctime>
 #include <mutex>
 #include <sstream>
 #include <string>
@@ -49,6 +51,7 @@ constexpr uint32 RAID_OF_TWENTY_FIVE_SIZE = 25;
 constexpr uint32 RAID_OF_FORTY_SIZE = 40;
 constexpr uint32 MAX_CHARACTERS_PER_ACCOUNT = 10;
 constexpr uint32 MAX_NEW_CHARACTERS_PER_COMMAND = 10;
+constexpr uint32 OFFLINE_GROUP_CHECK_INTERVAL_MS = 30000;
 constexpr uint8 MAX_FACTION_CREATION_ATTEMPTS = 3;
 constexpr size_t ROLE_COUNT = 3;
 constexpr size_t TANK_ROLE_INDEX = 0;
@@ -76,6 +79,7 @@ std::unordered_set<ObjectGuid> generatedBotLoginRequested;
 std::unordered_map<uint32, uint32> accountCharacterBaselines;
 std::unordered_map<uint32, uint32> accountCharacterReservations;
 std::atomic<bool> autoDismissOnDisband = false;
+std::atomic<uint32> autoDisbandOfflineMasterSeconds = 300;
 
 struct BotCreationContext
 {
@@ -294,6 +298,63 @@ void ProcessPendingDismissals()
             generatedBotLoginRequested.erase(botGuid);
         }
     }
+}
+
+void DisbandExpiredOfflineMasterGroups()
+{
+    uint32 timeoutSeconds = autoDisbandOfflineMasterSeconds.load();
+    if (!timeoutSeconds)
+        return;
+
+    QueryResult result = CharacterDatabase.Query(
+        "SELECT gm.guid, gm.memberGuid, c.logout_time "
+        "FROM group_member gm INNER JOIN characters c ON c.guid = gm.memberGuid "
+        "WHERE c.online = 0 AND c.logout_time > 0");
+    if (!result)
+        return;
+
+    time_t now = std::time(nullptr);
+    std::unordered_set<uint32> processedGroups;
+    do
+    {
+        Field* fields = result->Fetch();
+        uint32 groupId = fields[0].Get<uint32>();
+        ObjectGuid masterGuid = ObjectGuid::Create<HighGuid::Player>(fields[1].Get<uint32>());
+        uint32 logoutTime = fields[2].Get<uint32>();
+        if (static_cast<uint64>(now) < logoutTime || uint64(now - logoutTime) < timeoutSeconds ||
+            ObjectAccessor::FindConnectedPlayer(masterGuid))
+            continue;
+
+        Group* group = sGroupMgr->GetGroupByGUID(groupId);
+        if (!group || group->isLFGGroup() || group->isBGGroup() || group->isBFGroup() ||
+            !group->IsMember(masterGuid))
+            continue;
+
+        bool hasAddClassBot = false;
+        uint32 nonBotMembers = 0;
+        for (Group::MemberSlot const& slot : group->GetMemberSlots())
+        {
+            uint32 accountId = sCharacterCache->GetCharacterAccountIdByGuid(slot.guid);
+            if (sRandomPlayerbotMgr.IsAddClassAccount(accountId))
+                hasAddClassBot = true;
+            else
+            {
+                ++nonBotMembers;
+                if (slot.guid != masterGuid)
+                {
+                    nonBotMembers = 2;
+                    break;
+                }
+            }
+        }
+
+        if (!hasAddClassBot || nonBotMembers != 1 || !processedGroups.insert(groupId).second)
+            continue;
+
+        LOG_INFO("playerbots", "ZPBE disbanding group {} after master {} was offline for {} seconds",
+                 groupId, masterGuid.ToString(), now - logoutTime);
+        group->Disband();
+    } while (result->NextRow());
 }
 
 void CountRole(Player* member, std::array<uint32, ROLE_COUNT>& roleCounts)
@@ -735,16 +796,29 @@ public:
             LoadConfig();
     }
 
-    void OnUpdate(uint32 /*diff*/) override
+    void OnUpdate(uint32 diff) override
     {
         ProcessPendingDismissals();
+        if (_offlineGroupCheckTimerMs > 0)
+        {
+            _offlineGroupCheckTimerMs -= std::min(_offlineGroupCheckTimerMs, diff);
+            if (_offlineGroupCheckTimerMs > 0)
+                return;
+        }
+
+        _offlineGroupCheckTimerMs = OFFLINE_GROUP_CHECK_INTERVAL_MS;
+        DisbandExpiredOfflineMasterGroups();
     }
 
 private:
+    uint32 _offlineGroupCheckTimerMs = OFFLINE_GROUP_CHECK_INTERVAL_MS;
+
     static void LoadConfig()
     {
         autoDismissOnDisband.store(
             sConfigMgr->GetOption<bool>("ZnapshotPlayerbotEnhancer.AutoDismissOnDisband", false));
+        autoDisbandOfflineMasterSeconds.store(
+            sConfigMgr->GetOption<uint32>("ZnapshotPlayerbotEnhancer.AutoDisbandOfflineMasterSeconds", 300));
     }
 };
 } // namespace

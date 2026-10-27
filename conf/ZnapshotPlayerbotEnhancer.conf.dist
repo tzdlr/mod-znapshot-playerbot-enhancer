@@ -1,2 +1,6 @@
 # Automatically log out bots added by ZPBE when their group is disbanded.
 ZnapshotPlayerbotEnhancer.AutoDismissOnDisband = 0
+
+# Disband a group containing only one offline master and their AddClass bots after this many seconds.
+# Set to 0 to keep such groups indefinitely. The timeout uses the master's persisted logout time.
+ZnapshotPlayerbotEnhancer.AutoDisbandOfflineMasterSeconds = 300
