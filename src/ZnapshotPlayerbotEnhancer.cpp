@@ -18,6 +18,7 @@
 #include "PlayerbotGuildMgr.h"
 #include "PlayerbotFactory.h"
 #include "PlayerbotMgr.h"
+#include "PlayerbotTextMgr.h"
 #include "Playerbots.h"
 #include "RandomPlayerbotMgr.h"
 #include "RandomPlayerbotFactory.h"
@@ -267,6 +268,18 @@ void ProcessPendingDismissals()
         Player* owner = ObjectAccessor::FindConnectedPlayer(ownerGuid);
         PlayerbotMgr* manager = owner ? GET_PLAYERBOT_MGR(owner) : nullptr;
         Player* bot = manager ? manager->GetPlayerBot(botGuid) : nullptr;
+
+        Group* group = bot ? bot->GetGroup() : (owner ? owner->GetGroup() : nullptr);
+        if (group && group->IsMember(botGuid))
+        {
+            PlayerbotAI* botAI = bot ? sPlayerbotsMgr.GetPlayerbotAI(bot) : nullptr;
+            if (sPlayerbotAIConfig.TellMasterInGroupChat && owner && botAI && botAI->GetMaster() == owner)
+                botAI->TellMaster(PlayerbotTextMgr::instance().GetBotTextOrDefault(
+                    "goodbye", "Goodbye!", {}), PLAYERBOT_SECURITY_TALK);
+
+            group->RemoveMember(botGuid);
+        }
+
         if (bot)
             manager->LogoutPlayerBot(botGuid);
 
