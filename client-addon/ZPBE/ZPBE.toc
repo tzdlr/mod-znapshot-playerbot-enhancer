@@ -1,0 +1,8 @@
+## Interface: 30300
+## Title: ZPBE Toolbar
+## Notes: Quick chat-command toolbar for Znapshot Playerbot Enhancer.
+## Author: tzdlr
+## Version: 1.0.0
+## SavedVariables: ZPBE_UI_DB
+
+ZPBE.lua
